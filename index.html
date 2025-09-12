@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantumLeap Quiz Engine</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Orbitron for a futuristic feel -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Tone.js for synthesized audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        /* --- Keyframe Animations --- */
+        @keyframes gradientAnimation { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 15px 5px rgba(167, 139, 250, 0.3); } 50% { box-shadow: 0 0 30px 10px rgba(167, 139, 250, 0.5); } }
+        @keyframes donut-chart-fill { to { stroke-dasharray: 0 100; } }
+
+        /* --- General Body & Theming --- */
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(-45deg, #0f0c29, #302b63, #24243e);
+            background-size: 400% 400%;
+            animation: gradientAnimation 15s ease infinite;
+            color: #e0e7ff;
+            overflow: hidden;
+        }
+        
+        /* --- Main Container & Glassmorphism --- */
+        .main-container {
+            background: rgba(10, 10, 25, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            transition: all 0.5s ease-out;
+        }
+
+        /* --- Custom UI Elements --- */
+        .screen { display: none; animation: fadeIn 0.8s ease-out; }
+        .screen.active { display: block; }
+        .btn-primary { background: linear-gradient(45deg, #7c3aed, #a78bfa); transition: all 0.3s ease; }
+        .btn-primary:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 10px 20px rgba(124, 58, 237, 0.4); }
+        .quiz-option { background: rgba(49, 46, 129, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
+        .quiz-option:hover { background: rgba(76, 29, 149, 0.5); border-color: rgba(167, 139, 250, 0.5); transform: translateX(5px); }
+        .quiz-option.selected { background: rgba(124, 58, 237, 0.6); border-color: #a78bfa; }
+        .progress-bar { background: linear-gradient(90deg, #7c3aed, #a78bfa); transition: width 0.5s ease-out; }
+        .result-correct { background: rgba(34, 197, 94, 0.15); border-left: 4px solid #22c55e; }
+        .result-incorrect { background: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; }
+        
+        /* --- Animated Results Chart --- */
+        #results-chart-circle-progress {
+            animation: donut-chart-fill 2s reverse ease-out;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="app-container" class="main-container w-full max-w-2xl mx-auto p-6 sm:p-8 rounded-2xl">
+
+        <!-- ===== Welcome Screen ===== -->
+        <div id="welcome-screen" class="screen active">
+            <div class="text-center">
+                <h1 style="animation: slideInUp 0.5s ease-out;" class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-300 mb-4 tracking-wider">QuantumLeap Quiz</h1>
+                <p style="animation: slideInUp 0.7s ease-out;" class="text-indigo-300 mb-8">Select a category to begin calibration.</p>
+                <div id="category-selection" class="grid grid-cols-1 md:grid-cols-3 gap-4" style="animation: slideInUp 0.9s ease-out;">
+                    <!-- Categories will be injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Quiz Screen ===== -->
+        <div id="quiz-screen" class="screen">
+            <div id="quiz-header" class="flex justify-between items-center mb-4">
+                <h2 id="quiz-category-title" class="text-2xl font-bold text-indigo-200 tracking-wider"></h2>
+                <div id="timer" class="text-lg font-bold bg-black/20 text-violet-300 px-4 py-2 rounded-lg">01:30</div>
+            </div>
+            <div class="w-full bg-black/20 h-2.5 rounded-full mb-6">
+                <div id="progress-bar" class="progress-bar h-2.5 rounded-full"></div>
+            </div>
+            <div id="question-container" class="min-h-[350px]"></div>
+            <div class="mt-8 flex justify-between items-center">
+                <span id="question-counter" class="text-indigo-300 font-semibold"></span>
+                <button id="next-btn" class="btn-primary text-white font-semibold py-3 px-8 rounded-lg shadow-lg">Next</button>
+            </div>
+        </div>
+
+        <!-- ===== Results Screen ===== -->
+        <div id="results-screen" class="screen">
+             <h2 class="text-3xl font-bold text-center text-indigo-200 mb-6">Analysis Complete</h2>
+            <div class="grid md:grid-cols-2 gap-6 items-center">
+                <div class="relative w-48 h-48 mx-auto">
+                    <svg class="w-full h-full" viewBox="0 0 36 36">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#312e81" stroke-width="3"/>
+                        <path id="results-chart-circle-progress" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#a78bfa" stroke-width="3" stroke-dasharray="100, 100" stroke-linecap="round"/>
+                    </svg>
+                    <div id="score-text" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                        <span id="final-score" class="text-4xl font-bold"></span>
+                        <p class="text-sm text-indigo-300">Score</p>
+                    </div>
+                </div>
+                <div>
+                     <input id="player-name" type="text" placeholder="Enter Your Name" class="w-full bg-indigo-900/50 border border-indigo-700 rounded-lg px-4 py-2 mb-3 text-white placeholder-indigo-400 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+                     <button id="save-score-btn" class="btn-primary w-full text-white font-semibold py-2 rounded-lg mb-4">Save High Score</button>
+                     <div id="high-scores">
+                        <h3 class="text-lg font-bold text-center text-indigo-200 mb-2">Leaderboard</h3>
+                        <ul id="high-scores-list" class="text-center text-indigo-300"></ul>
+                     </div>
+                </div>
+            </div>
+             <div class="mt-6 text-center">
+                <button id="view-details-btn" class="text-indigo-300 hover:text-white underline">View Detailed Analysis</button>
+             </div>
+             <div class="mt-4 text-center">
+                <button id="play-again-btn" class="btn-primary text-white font-semibold py-3 px-12 rounded-lg shadow-lg">Re-initialize</button>
+            </div>
+        </div>
+
+        <!-- Modal for Detailed Results -->
+        <div id="details-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 hidden">
+            <div class="main-container w-full max-w-2xl rounded-2xl p-6 relative">
+                 <button id="close-modal-btn" class="absolute top-4 right-4 text-indigo-300 hover:text-white">&times;</button>
+                 <h2 class="text-2xl font-bold text-center text-indigo-200 mb-4">Detailed Breakdown</h2>
+                 <div id="detailed-results" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const quizBank = {
+            'Technology': [
+                { q: "What does 'GPU' stand for?", o: ["Graphics Processing Unit", "General Processing Unit", "Geometric Placement Unit", "Graphical Performance Unit"], a: 0 },
+                { q: "What is the primary function of RAM?", o: ["Long-term storage", "Executing commands", "Temporary data storage", "Powering the CPU"], a: 2 },
+                { q: "Which company developed the USB standard?", o: ["Apple", "Microsoft", "A consortium including Intel", "IBM"], a: 2 },
+                { q: "What does 'SSD' stand for in computer storage?", o: ["Solid State Drive", "Super Speed Disk", "Secure Storage Device", "System Storage Drive"], a: 0 },
+                { q: "What does the acronym 'HTTP' stand for?", o: ["HyperText Transfer Protocol", "HyperText Transmission Process", "High-Tier Transfer Protocol", "HyperText Transfer Pipeline"], a: 0 }
+            ],
+            'Science': [
+                { q: "What is the chemical symbol for Gold?", o: ["Ag", "Au", "Gd", "Go"], a: 1 },
+                { q: "What is the powerhouse of the cell?", o: ["Nucleus", "Ribosome", "Mitochondrion", "Cell Wall"], a: 2 },
+                { q: "At what temperature are Celsius and Fahrenheit equal?", o: ["0 degrees", "32 degrees", "-40 degrees", "100 degrees"], a: 2 },
+                { q: "What planet is known as the Red Planet?", o: ["Venus", "Jupiter", "Mars", "Saturn"], a: 2 },
+                { q: "What is the hardest natural substance on Earth?", o: ["Quartz", "Gold", "Iron", "Diamond"], a: 3 }
+            ],
+            'Computing History': [
+                { q: "Who is considered the 'father of the computer'?", o: ["Alan Turing", "Charles Babbage", "John von Neumann", "Bill Gates"], a: 1 },
+                { q: "What was the name of the first general-purpose electronic computer?", o: ["ENIAC", "UNIVAC", "COLOSSUS", "MARK I"], a: 0 },
+                { q: "Which programming language was developed by James Gosling at Sun Microsystems?", o: ["C++", "Python", "Java", "Perl"], a: 2 },
+                { q: "In what decade was the first email sent?", o: ["1960s", "1980s", "1970s", "1990s"], a: 2 },
+                { q: "What company introduced the first commercially successful personal computer, the 'Apple II'?", o: ["IBM", "Microsoft", "Commodore", "Apple"], a: 3 }
+            ]
+        };
+
+        let currentQuestions = [];
+        let currentQuestionIndex = 0;
+        let userAnswers = [];
+        let timerInterval;
+        let score = 0;
+        let quizStartTime;
+
+        // --- DOM Elements ---
+        const screens = {
+            welcome: document.getElementById('welcome-screen'),
+            quiz: document.getElementById('quiz-screen'),
+            results: document.getElementById('results-screen')
+        };
+        const categorySelection = document.getElementById('category-selection');
+        const nextBtn = document.getElementById('next-btn');
+        const playAgainBtn = document.getElementById('play-again-btn');
+        const detailsModal = document.getElementById('details-modal');
+        const viewDetailsBtn = document.getElementById('view-details-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const saveScoreBtn = document.getElementById('save-score-btn');
+        const highScoresList = document.getElementById('high-scores-list');
+
+        // --- Audio Synthesis ---
+        const sounds = {
+            click: new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.0, release: 0.1 } }).toDestination(),
+            correct: new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.005, decay: 0.2, sustain: 0.0, release: 0.2 } }).toDestination(),
+            incorrect: new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.005, decay: 0.2, sustain: 0.0, release: 0.2 } }).toDestination(),
+            finish: new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.01, decay: 0.5, sustain: 0.1, release: 0.5 } }).toDestination(),
+        };
+
+        const playSound = (sound, note, duration = '8n') => {
+            if (Tone.context.state !== 'running') Tone.start();
+            sounds[sound].triggerAttackRelease(note, duration);
+        };
+        
+        // --- Navigation ---
+        const navigateTo = (screenName) => {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            screens[screenName].classList.add('active');
+        };
+
+        // --- Initialization ---
+        function init() {
+            categorySelection.innerHTML = Object.keys(quizBank).map(cat => `
+                <button data-category="${cat}" class="category-btn btn-primary text-white font-semibold py-6 rounded-lg shadow-lg">${cat}</button>
+            `).join('');
+            
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    playSound('click', 'C4');
+                    startQuiz(btn.dataset.category);
+                });
+            });
+
+            navigateTo('welcome');
+        }
+
+        // --- Quiz Logic ---
+        function startQuiz(category) {
+            currentQuestions = quizBank[category];
+            currentQuestionIndex = 0;
+            userAnswers = new Array(currentQuestions.length).fill(null);
+            score = 0;
+            quizStartTime = Date.now();
+
+            document.getElementById('quiz-category-title').textContent = category;
+            
+            navigateTo('quiz');
+            renderQuestion();
+            startTimer(90);
+        }
+
+        function renderQuestion() {
+            const questionData = currentQuestions[currentQuestionIndex];
+            const questionContainer = document.getElementById('question-container');
+            
+            questionContainer.style.opacity = 0;
+            setTimeout(() => {
+                questionContainer.innerHTML = `
+                    <p class="text-xl font-semibold text-indigo-200 mb-6">${currentQuestionIndex + 1}. ${questionData.q}</p>
+                    <div class="space-y-3">
+                        ${questionData.o.map((option, i) => `
+                            <div class="quiz-option p-4 w-full rounded-lg cursor-pointer flex items-center" data-index="${i}">
+                                <span class="border-2 border-indigo-400 rounded-full w-6 h-6 flex items-center justify-center mr-4">${String.fromCharCode(65 + i)}</span>
+                                <span class="text-indigo-200">${option}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                document.querySelectorAll('.quiz-option').forEach(opt => {
+                    opt.addEventListener('click', handleOptionSelect);
+                });
+                questionContainer.style.opacity = 1;
+            }, 300);
+
+            updateProgressBar();
+            document.getElementById('question-counter').textContent = `Question ${currentQuestionIndex + 1} / ${currentQuestions.length}`;
+            nextBtn.textContent = currentQuestionIndex === currentQuestions.length - 1 ? 'Finish' : 'Next';
+        }
+
+        function handleOptionSelect(e) {
+            playSound('click', 'E4');
+            const selectedOption = e.currentTarget;
+            userAnswers[currentQuestionIndex] = parseInt(selectedOption.dataset.index);
+            
+            document.querySelectorAll('.quiz-option').forEach(opt => opt.classList.remove('selected'));
+            selectedOption.classList.add('selected');
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (userAnswers[currentQuestionIndex] === null) return; // Optional: prevent moving without an answer
+
+            if (userAnswers[currentQuestionIndex] === currentQuestions[currentQuestionIndex].a) {
+                playSound('correct', 'C5');
+                score++;
+            } else {
+                playSound('incorrect', 'C3');
+            }
+
+            if (currentQuestionIndex < currentQuestions.length - 1) {
+                currentQuestionIndex++;
+                renderQuestion();
+            } else {
+                finishQuiz();
+            }
+        });
+
+        // --- Timer & Progress ---
+        function startTimer(duration) {
+            let timeLeft = duration;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const minutes = Math.floor(timeLeft / 60);
+                let seconds = timeLeft % 60;
+                seconds = seconds < 10 ? '0' + seconds : seconds;
+                document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+                if (--timeLeft < 0) finishQuiz();
+            }, 1000);
+        }
+
+        function updateProgressBar() {
+            const progress = (currentQuestionIndex / currentQuestions.length) * 100;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+        }
+        
+        // --- Results Logic ---
+        function finishQuiz() {
+            playSound('finish', 'G4', '2n');
+            clearInterval(timerInterval);
+            navigateTo('results');
+            renderResults();
+        }
+
+        function renderResults() {
+            const percentage = Math.round((score / currentQuestions.length) * 100);
+            const quizTime = ((Date.now() - quizStartTime) / 1000).toFixed(1);
+            
+            // Animate score text
+            const scoreEl = document.getElementById('final-score');
+            let currentScore = 0;
+            const scoreInterval = setInterval(() => {
+                scoreEl.textContent = `${currentScore}%`;
+                if (currentScore >= percentage) clearInterval(scoreInterval);
+                currentScore++;
+            }, 20);
+
+            // Animate chart
+            document.getElementById('results-chart-circle-progress').style.strokeDasharray = `${percentage}, 100`;
+
+            // Render details for modal
+            document.getElementById('detailed-results').innerHTML = currentQuestions.map((q, i) => {
+                const correct = userAnswers[i] === q.a;
+                return `<div class="p-4 rounded-lg ${correct ? 'result-correct' : 'result-incorrect'}">
+                            <p class="font-semibold text-indigo-100 mb-2">${i+1}. ${q.q}</p>
+                            <p class="text-sm">Your answer: ${userAnswers[i] !== null ? q.o[userAnswers[i]] : 'Not answered'}</p>
+                            ${!correct ? `<p class="text-sm text-green-300 font-medium">Correct: ${q.o[q.a]}</p>` : ''}
+                        </div>`;
+            }).join('');
+            
+            updateHighScores();
+        }
+
+        // --- High Scores ---
+        function updateHighScores() {
+            const highScores = JSON.parse(localStorage.getItem('highScores')) || [];
+            highScoresList.innerHTML = highScores
+                .sort((a,b) => b.score - a.score || a.time - b.time)
+                .slice(0, 3)
+                .map(s => `<li>${s.name} - ${s.score}/${currentQuestions.length} (${s.time}s)</li>`)
+                .join('') || '<li>No scores yet!</li>';
+        }
+
+        saveScoreBtn.addEventListener('click', () => {
+             const name = document.getElementById('player-name').value;
+             if (!name) return;
+             const highScores = JSON.parse(localStorage.getItem('highScores')) || [];
+             highScores.push({ name, score, time: ((Date.now() - quizStartTime) / 1000).toFixed(1) });
+             localStorage.setItem('highScores', JSON.stringify(highScores));
+             updateHighScores();
+             saveScoreBtn.disabled = true;
+             saveScoreBtn.textContent = 'Score Saved!';
+        });
+
+        // --- Event Listeners ---
+        playAgainBtn.addEventListener('click', () => {
+            playSound('click', 'C4');
+            init();
+        });
+        viewDetailsBtn.addEventListener('click', () => detailsModal.classList.remove('hidden'));
+        closeModalBtn.addEventListener('click', () => detailsModal.classList.add('hidden'));
+
+        init();
+    });
+    </script>
+</body>
+</html>
+
+
+
+
+    
